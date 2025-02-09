@@ -2,7 +2,7 @@
 
 '''
     MoziMix Addon
-    Copyright (C) 2023 heg, vargalex
+    Copyright (C) 2025 heg, vargalex
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -40,8 +40,9 @@ xbmc.log(f'{base_log_info}', xbmc.LOGINFO)
 base_url = 'https://mozimix.com'
 
 headers = {
-    'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-    'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36',
+    'referer': 'https://mozimix.com/',
+    'upgrade-insecure-requests': '1',
+    'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36',
 }
 
 if sys.version_info[0] == 3:
@@ -303,8 +304,11 @@ class navigator:
         try:
             player_source = re.findall(r'<iframe.*\"(https.*mozimix.com.*source=.*?)\"', str(soup_2))[0].strip()
         except IndexError:
-            player_source = re.findall(r"<iframe.*?src='(.*?)\'", str(soup_2))[0].strip()
-        
+            try:
+                player_source = re.findall(r"<iframe.*?src='(.*?)\'", str(soup_2))[0].strip()
+            except IndexError:
+                player_source = re.findall(r"iframe class.*'(https.*?source.*?)\'", str(soup_2))[0].strip()
+
         dec_player_source = html.unescape(player_source)
         
         response_02 = requests.get(dec_player_source, headers=headers)
