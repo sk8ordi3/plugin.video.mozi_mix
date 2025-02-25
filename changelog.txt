@@ -1,4 +1,6 @@
-﻿[B]1.0.1[/B]
+﻿[B]1.0.2[/B]
+- oldal változtatás lekövetve
+[B]1.0.1[/B]
 - oldal változtatás lekövetve
 [B]1.0.0[/B]
 - Első verzió

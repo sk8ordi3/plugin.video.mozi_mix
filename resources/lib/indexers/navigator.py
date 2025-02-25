@@ -302,12 +302,18 @@ class navigator:
             pass
         
         try:
-            player_source = re.findall(r'<iframe.*\"(https.*mozimix.com.*source=.*?)\"', str(soup_2))[0].strip()
+            player_stuffs = re.findall(r"picture/\?source.*?encodeURIComponent\('(.*?)\';", str(soup_2))[0].strip()
+            player_part1 = re.findall(r"(.*?)'\)", str(player_stuffs))[0].strip()
+            player_part2 = re.findall(r"(&id.*)", str(player_stuffs))[0].strip()
+            player_source = f'https://mozimix.com/picture/?source={player_part1}{player_part2}'
         except IndexError:
             try:
-                player_source = re.findall(r"<iframe.*?src='(.*?)\'", str(soup_2))[0].strip()
-            except IndexError:
-                player_source = re.findall(r"iframe class.*'(https.*?source.*?)\'", str(soup_2))[0].strip()
+                player_source = re.findall(r'<iframe.*\"(https.*mozimix.com.*source=.*?)\"', str(soup_2))[0].strip()
+            except IndexError:    
+                try:
+                    player_source = re.findall(r"<iframe.*?src='(.*?)\'", str(soup_2))[0].strip()
+                except IndexError:
+                    player_source = re.findall(r"iframe class.*'(https.*?source.*?)\'", str(soup_2))[0].strip()
 
         dec_player_source = html.unescape(player_source)
         
