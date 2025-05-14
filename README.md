@@ -3,6 +3,8 @@
 
 Kodi kiegészítő a MoziMix-hez
 
+1.0.3 - oldal változtatás lekövetve
+
 1.0.2 - oldal változtatás lekövetve
 
 1.0.1 - oldal változtatás lekövetve

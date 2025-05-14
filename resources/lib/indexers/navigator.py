@@ -293,29 +293,18 @@ class navigator:
         else:
             pass
         
-        html_soup_2 = requests.get(url, headers=headers)
-        soup_2 = BeautifulSoup(html_soup_2.text, 'html.parser')
-        
+        html_source = requests.get(url, headers=headers).text
         try:
-            content = re.findall(r"<h2>Történet</h2>.*?<p>(.*?)</p>", str(soup_2))[0].strip()
+            content = re.findall(r"<h2>Történet</h2>.*?<p>(.*?)</p>", str(html_source))[0].strip()
         except IndexError:
             pass
-        
-        try:
-            player_stuffs = re.findall(r"picture/\?source.*?encodeURIComponent\('(.*?)\';", str(soup_2))[0].strip()
-            player_part1 = re.findall(r"(.*?)'\)", str(player_stuffs))[0].strip()
-            player_part2 = re.findall(r"(&id.*)", str(player_stuffs))[0].strip()
-            player_source = f'https://mozimix.com/picture/?source={player_part1}{player_part2}'
-        except IndexError:
-            try:
-                player_source = re.findall(r'<iframe.*\"(https.*mozimix.com.*source=.*?)\"', str(soup_2))[0].strip()
-            except IndexError:    
-                try:
-                    player_source = re.findall(r"<iframe.*?src='(.*?)\'", str(soup_2))[0].strip()
-                except IndexError:
-                    player_source = re.findall(r"iframe class.*'(https.*?source.*?)\'", str(soup_2))[0].strip()
 
-        dec_player_source = html.unescape(player_source)
+        player_id = re.findall(r"data-post='(\d+?)'", str(html_source))[0].strip()
+        player_source_id = re.findall(r"data-source='(.*?)'", str(html_source))[0].strip()
+
+        player_source_link = f'https://mozimix.com/picture/?source={player_source_id}&id={player_id}'
+        
+        dec_player_source = html.unescape(player_source_link)
         
         response_02 = requests.get(dec_player_source, headers=headers)
         soup_3 = BeautifulSoup(response_02.text, 'html.parser')
