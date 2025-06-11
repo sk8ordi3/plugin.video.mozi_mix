@@ -294,13 +294,15 @@ class navigator:
             pass
         
         html_source = requests.get(url, headers=headers).text
-        try:
-            content = re.findall(r"<h2>Történet</h2>.*?<p>(.*?)</p>", str(html_source))[0].strip()
-        except IndexError:
-            pass
+        
+        soup = BeautifulSoup(html_source, 'html.parser')
+        content = soup.select_one('#info .wp-content p').get_text(strip=True) if soup.select_one('#info .wp-content p') else ''
 
         player_id = re.findall(r"data-post='(\d+?)'", str(html_source))[0].strip()
-        player_source_id = re.findall(r"data-source='(.*?)'", str(html_source))[0].strip()
+        try:
+            player_source_id = re.findall(r"data-source='(.*?)'", str(html_source))[0].strip()
+        except IndexError:
+            player_source_id = re.findall(r"source=(.*)&", str(html_source))[0].strip()
 
         player_source_link = f'https://mozimix.com/picture/?source={player_source_id}&id={player_id}'
         
@@ -323,7 +325,7 @@ class navigator:
         response = requests.get(url, headers=headers)
         soup = BeautifulSoup(response.text, 'html.parser')
         
-        content = re.findall(r"<h2>Történet</h2>.*?<p>(.*?)</p>", str(soup))[0].strip()
+        content = soup.select_one('#info .wp-content p').get_text(strip=True) if soup.select_one('#info .wp-content p') else ''
         
         for season_div in soup.find_all('div', class_='evadgombok'):
             for episode_link in season_div.find_all('a', class_='emplink'):
@@ -336,6 +338,7 @@ class navigator:
         self.endDirectory('movies')
 
     def playMovie(self, url):
+        url = html.unescape(url)
         try:
             if re.search('.*ok.ru.*', url):
                 iframe_resp = requests.get(url, allow_redirects=False)
