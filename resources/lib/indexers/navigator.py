@@ -32,17 +32,34 @@ syshandle = int(sys.argv[1])
 addonFanart = xbmcaddon.Addon().getAddonInfo('fanart')
 
 version = xbmcaddon.Addon().getAddonInfo('version')
-kodi_version = xbmc.getInfoLabel('System.BuildVersion')
-base_log_info = f'MoziMix | v{version} | Kodi: {kodi_version[:5]}'
+base_log_info = f'MoziMix | v{version}'
 
 xbmc.log(f'{base_log_info}', xbmc.LOGINFO)
 
 base_url = 'https://mozimix.com'
 
+addon = xbmcaddon.Addon('plugin.video.mozi_mix')
+
+mozi_mix_user = addon.getSetting('username')
+mozi_mix_pass = addon.getSetting('password')
+
 headers = {
+    'accept': 'application/json, text/javascript, */*; q=0.01',
+    'accept-language': 'hu',
+    'content-type': 'application/x-www-form-urlencoded; charset=UTF-8',
+    'origin': 'https://mozimix.com',
     'referer': 'https://mozimix.com/',
-    'upgrade-insecure-requests': '1',
-    'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36',
+    'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36',
+    'x-requested-with': 'XMLHttpRequest',
+}
+
+login_data = {
+    'log': mozi_mix_user,
+    'pwd': mozi_mix_pass,
+    'rmb': 'forever',
+    'google-recaptcha-token': '',
+    'action': 'dooplay_login',
+    'red': 'https://mozimix.com/account/',
 }
 
 if sys.version_info[0] == 3:
@@ -64,14 +81,127 @@ class navigator:
                 pass
         self.base_path = py2_decode(translatePath(xbmcaddon.Addon().getAddonInfo('profile')))
 
+        self.target_cookies = None
+        self.load_cookies()
+
+    def load_cookies(self):
+        stored_cookie_name = addon.getSetting("target_cookie_name")
+        stored_cookie_value = addon.getSetting("wordpress_logged_in_cookie_value")
+        if stored_cookie_name and stored_cookie_value:
+            self.target_cookies = {
+                stored_cookie_name: stored_cookie_value
+            }
+
+    def mozi_login(self):
+        login_response = requests.post('https://mozimix.com/wp-admin/admin-ajax.php', headers=headers, data=login_data)
+
+        found_target_cookie_name = None
+        found_wordpress_logged_in_cookie_value = None
+        
+        for cookie_name, cookie_value in login_response.cookies.items():
+            if cookie_name.startswith('wordpress_logged_in_'):
+                found_target_cookie_name = cookie_name
+                found_wordpress_logged_in_cookie_value = cookie_value
+                break
+            
+        if not found_target_cookie_name or not found_wordpress_logged_in_cookie_value:
+            xbmcgui.Dialog().notification(addon.getAddonInfo('name'), 'Sikertelen bejelentkezés! Ellenőrizd a felhasználónevet/jelszót.', xbmcgui.NOTIFICATION_ERROR, 5000)
+            return False
+
+        addon.setSetting("target_cookie_name", found_target_cookie_name)
+        addon.setSetting("wordpress_logged_in_cookie_value", found_wordpress_logged_in_cookie_value)
+
+        self.target_cookies = {
+            found_target_cookie_name: found_wordpress_logged_in_cookie_value
+        }
+
+        return True
+
+    def ens_logged_in(self):
+        if self.target_cookies:
+            return True
+
+        if mozi_mix_user and mozi_mix_pass:
+            return self.mozi_login()
+        else:
+            addon.openSettings()
+            return False
+
     def root(self):
         self.addDirectoryItem("Filmek", f"get_items&url={base_url}/index.php/movies", '', 'DefaultFolder.png')
         self.addDirectoryItem("Sorozatok", f"get_items&url={base_url}/index.php/tvshows", '', 'DefaultFolder.png')
         self.addDirectoryItem("Kategóriák", "get_categories", '', 'DefaultFolder.png')
         self.addDirectoryItem("Év szerint", "get_years", '', 'DefaultFolder.png')
         self.addDirectoryItem("Keresés", "newsearch", '', 'DefaultFolder.png')
+        self.addDirectoryItem("Kedvenceim", f"get_favorites&url={base_url}/account/", '', 'DefaultFolder.png')
+        self.addDirectoryItem("[B][COLOR ffff0000]Kijelentkezés[/COLOR][/B]", "log_out", '', 'DefaultFolder.png', isFolder=False)
+        
         self.endDirectory()
 
+    def LogOut(self, url):
+        self.target_cookies = None
+
+        addon.setSetting("target_cookie_name", "")
+        addon.setSetting("wordpress_logged_in_cookie_value", "")
+
+        xbmcgui.Dialog().notification(addon.getAddonInfo('name'), 'Sikeres kijelentkezés!', xbmcgui.NOTIFICATION_INFO, 3000)
+        xbmc.executebuiltin('Container.Refresh()')
+
+    def getFavorites(self, url):
+        if not self.ens_logged_in():
+            return []
+        
+        page = requests.get(url, headers=headers, cookies=self.target_cookies)
+        soup = BeautifulSoup(page.text, 'html.parser')
+        
+        favorites_div = soup.find('div', id='favorites')
+        if favorites_div:
+            articles = favorites_div.find_all('article', class_='simple')
+            
+            for article in articles:
+                poster_element = article.find('img')
+                poster = poster_element['src'] if poster_element else 'N/A'
+        
+                title_element = article.find('h3', recursive=True)
+                title = title_element.find('a').get_text(strip=True) if title_element and title_element.find('a') else 'N/A'
+        
+                card_type = 'N/A'
+                for class_name in article.get('class', []):
+                    if class_name != 'simple':
+                        card_type = class_name
+                        if re.search(r'tvshows', str(card_type)):
+                            card_type = 'Sorozat'
+                        else:
+                            card_type = 'Film'
+                        break
+        
+                card_link_element = article.find('h3', recursive=True)
+                card_link = card_link_element.find('a')['href'] if card_link_element and card_link_element.find('a') else 'N/A'
+        
+                release_date_element = article.find('div', class_='data')
+                release_date = release_date_element.find('span').get_text(strip=True) if release_date_element and release_date_element.find('span') else 'N/A'
+                
+                if card_type == 'Sorozat':
+                    self.addDirectoryItem(
+                        f'[B] {card_type} | {title}[/B]',
+                        f'extract_seasons&url={card_link}&poster={poster}&title={title}&release_date={release_date}&card_type={card_type}', 
+                        poster, 
+                        'DefaultMovies.png', 
+                        isFolder=True, 
+                        meta={'title': title}
+                    )
+                else:
+                    self.addDirectoryItem(
+                        f'[B] {card_type:^10} | {title}[/B]', 
+                        f'extract_movie&url={card_link}&poster={poster}&title={title}&release_date={release_date}&card_type={card_type}', 
+                        poster, 
+                        'DefaultMovies.png', 
+                        isFolder=True, 
+                        meta={'title': title}
+                    )
+        
+        self.endDirectory('movies')
+    
     def getCategories(self, url):
         jsonData = {
           "categorys": [
@@ -210,11 +340,14 @@ class navigator:
         self.endDirectory('movies')
 
     def getItems(self, url, poster, title, release_date, rating, card_type, quality):
+        if not self.ens_logged_in():
+            return []
+        
         if re.search(r'https%3A%2F%2F', url):
             url = unquote(url)
         
         try:
-            page = requests.get(url, headers=headers)
+            page = requests.get(url, headers=headers, cookies=self.target_cookies)
             soup = BeautifulSoup(page.text, 'html.parser')
             
             for article in soup.find_all('article', id=re.compile(r'^post-\d+$')):
@@ -257,7 +390,7 @@ class navigator:
                 else:
                     if quality:
                         self.addDirectoryItem(
-                            f'[B] {card_type} | [COLOR red]{quality}[/COLOR] | {title} | [COLOR yellow]{rating}[/COLOR][/B]', 
+                            f'[B] {card_type:^10} | [COLOR red]{quality}[/COLOR] | {title} | [COLOR yellow]{rating}[/COLOR][/B]', 
                             f'extract_movie&url={card_link}&poster={poster}&title={title}&release_date={release_date}&rating={rating}&card_type={card_type}&quality={quality}', 
                             poster, 
                             'DefaultMovies.png', 
@@ -266,7 +399,7 @@ class navigator:
                         )
                     else:
                         self.addDirectoryItem(
-                            f'[B] {card_type} | {title} | [COLOR yellow]{rating}[/COLOR][/B]', 
+                            f'[B] {card_type:^10} | {title} | [COLOR yellow]{rating}[/COLOR][/B]', 
                             f'extract_movie&url={card_link}&poster={poster}&title={title}&release_date={release_date}&rating={rating}&card_type={card_type}&quality={quality}', 
                             poster, 
                             'DefaultMovies.png', 
@@ -288,41 +421,64 @@ class navigator:
         self.endDirectory('movies')
 
     def extractMovie(self, url, poster, title, release_date, card_type, rating, content, c_id, ep_title):
+        if not self.ens_logged_in():
+            return []       
+
         if re.search(r'ep=', url):
             url = f"https://mozimix.com/index.php/tvshows/{c_id}/{url}"
         else:
             pass
         
-        html_source = requests.get(url, headers=headers).text
+        html_source = requests.get(url, headers=headers, cookies=self.target_cookies).text
         
         soup = BeautifulSoup(html_source, 'html.parser')
         content = soup.select_one('#info .wp-content p').get_text(strip=True) if soup.select_one('#info .wp-content p') else ''
 
-        player_id = re.findall(r"data-post='(\d+?)'", str(html_source))[0].strip()
-        try:
-            player_source_id = re.findall(r"data-source='(.*?)'", str(html_source))[0].strip()
-        except IndexError:
-            player_source_id = re.findall(r"source=(.*)&", str(html_source))[0].strip()
+        player_id_match = re.findall(r"data-post='(\d+?)'", str(html_source))
+        player_id = player_id_match[0].strip() if player_id_match else '' 
+
+        player_source_id = ''
+        player_source_id_match_1 = re.findall(r"data-source='(.*?)'", str(html_source))
+
+        if player_source_id_match_1:
+            player_source_id = player_source_id_match_1[0].strip()
+        else:
+            player_source_id_match_2 = re.findall(r"source=(.*)&", str(html_source))
+            
+            if player_source_id_match_2:
+                player_source_id = player_source_id_match_2[0].strip()
+            else:
+                return
 
         player_source_link = f'https://mozimix.com/picture/?source={player_source_id}&id={player_id}'
         
         dec_player_source = html.unescape(player_source_link)
         
-        response_02 = requests.get(dec_player_source, headers=headers)
+        response_02 = requests.get(dec_player_source, headers=headers, cookies=self.target_cookies)
         soup_3 = BeautifulSoup(response_02.text, 'html.parser')
 
-        iframe_src = soup_3.find('video').find('source')['src']
-        
+        iframe_src = ''
+        video_tag = soup_3.find('video')
+        if video_tag and video_tag.find('source'):
+            iframe_src = video_tag.find('source')['src']
+        else:
+            xbmcgui.Dialog().notification("MoziMix", "Nem található videó forrás", time=5000)
+            return
+
         if re.search(r'ep=', url):
             self.addDirectoryItem(f'[B] {ep_title} - {title} | [COLOR yellow]{rating}[/COLOR][/B]', f'playmovie&url={quote_plus(iframe_src)}&poster={poster}&release_date={release_date}&rating={rating}&card_type={card_type}&content={content}', poster, 'DefaultMovies.png', isFolder=False, meta={'title': f"{ep_title} - {title}", 'plot': content})
         else:
             self.addDirectoryItem(f'[B] {title} | [COLOR yellow]{rating}[/COLOR][/B]', f'playmovie&url={quote_plus(iframe_src)}&poster={poster}&release_date={release_date}&rating={rating}&card_type={card_type}&content={content}', poster, 'DefaultMovies.png', isFolder=False, meta={'title': title, 'plot': content})        
+        
         self.endDirectory('movies')
 
     def extractSeasons(self, url, poster, title, release_date, card_type, rating, ep_title, content, c_id):
+        if not self.ens_logged_in():
+            return []    
+        
         c_id = re.findall(r'/.*/(.*)\S', url)[0].strip()
         
-        response = requests.get(url, headers=headers)
+        response = requests.get(url, headers=headers, cookies=self.target_cookies)
         soup = BeautifulSoup(response.text, 'html.parser')
         
         content = soup.select_one('#info .wp-content p').get_text(strip=True) if soup.select_one('#info .wp-content p') else ''
@@ -358,6 +514,9 @@ class navigator:
             xbmcgui.Dialog().notification("MoziMix", "törölt tartalom", time=5000)
 
     def doSearch(self):
+        if not self.ens_logged_in():
+            return []   
+        
         search_text = self.getSearchText()
         if search_text != '':
             if not os.path.exists(self.base_path):
@@ -366,7 +525,7 @@ class navigator:
             enc_text = quote_plus(search_text)
             url = f'https://mozimix.com/?s={enc_text}'
             
-            html_soup_2 = requests.get(url, headers=headers)
+            html_soup_2 = requests.get(url, headers=headers, cookies=self.target_cookies)
             soup_2 = BeautifulSoup(html_soup_2.text, 'html.parser')
             
             result_items = soup_2.find_all('div', class_='result-item')
@@ -381,7 +540,7 @@ class navigator:
                 
                 rating = item.find('span', class_='rating').text if item.find('span', class_='rating') else 'N/A'
                 release_date = item.find('span', class_='year').text if item.find('span', class_='year') else 'N/A'
-                content = item.find('p').text if item.find('p') else 'N/A'                
+                content = item.find('p').text if item.find('p') else 'N/A'
                 
                 if re.search(r'movie', url):
                     self.addDirectoryItem(f'[B]Film | {title} | [COLOR yellow]{rating}[/COLOR][/B]', f'extract_movie&url={quote_plus(url)}&poster={poster}&title={title}&rating={rating}&release_date={release_date}&content={content}', poster, 'DefaultMovies.png', isFolder=True, meta={'title': title, 'plot': content})

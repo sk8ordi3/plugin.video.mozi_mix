@@ -3,6 +3,8 @@
 
 Kodi kiegészítő a MoziMix-hez
 
+1.0.5 - új regisztráció szükséges, Kedvenceim tab hozzáadva
+
 1.0.4 - oldal változtatás lekövetve
 
 1.0.3 - oldal változtatás lekövetve

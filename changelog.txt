@@ -1,4 +1,6 @@
-﻿[B]1.0.4[/B]
+﻿[B]1.0.5[/B]
+- új regisztráció szükséges, Kedvenceim tab hozzáadva
+[B]1.0.4[/B]
 - oldal változtatás lekövetve
 [B]1.0.3[/B]
 - oldal változtatás lekövetve

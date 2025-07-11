@@ -44,6 +44,14 @@ c_id = params.get('c_id')
 if action is None:
     navigator.navigator().root()
 
+
+elif action == 'log_out':
+    navigator.navigator().LogOut(url)
+
+elif action == 'get_favorites':
+    navigator.navigator().getFavorites(url)
+
+
 elif action == 'get_categories':
     navigator.navigator().getCategories(url)
 
